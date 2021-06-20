@@ -199,9 +199,40 @@ function reconcileChildren(wipFiber, elements) {
         index++;
     }
 }
+var wipFiber = null;
+var hookIndex = null;
 function updateFunctionComponent(fiber) {
+    wipFiber = fiber;
+    hookIndex = 0;
+    wipFiber.hooks = [];
     var children = [fiber.type(fiber.props)];
     reconcileChildren(fiber, children);
+}
+function useState(initial) {
+    var oldHook = wipFiber.alternate &&
+        wipFiber.alternate.hooks &&
+        wipFiber.alternate.hooks[hookIndex];
+    var hook = {
+        state: oldHook ? oldHook.state : initial,
+        queue: []
+    };
+    var actions = oldHook ? oldHook.queue : [];
+    actions.forEach(function (action) {
+        hook.state = action(hook.state);
+    });
+    var setState = function (action) {
+        hook.queue.push(action);
+        wipRoot = {
+            dom: currentRoot.dom,
+            props: currentRoot.props,
+            alternate: currentRoot
+        };
+        nextUnitOfWork = wipRoot;
+        deletions = [];
+    };
+    wipFiber.hooks.push(hook);
+    hookIndex++;
+    return [hook.state, setState];
 }
 function updateHostComponent(fiber) {
     if (!fiber.dom) {
@@ -242,14 +273,15 @@ function render(element, container) {
 }
 var Didact = {
     createElement: createElement,
-    render: render
+    render: render,
+    useState: useState
 };
 var container = document.getElementById("root");
-function App(props) {
+function App() {
+    var _a = Didact.useState(0), state = _a[0], setState = _a[1];
     return Didact.createElement("div", null,
-        Didact.createElement("input", { value: props.value }),
-        Didact.createElement("h2", null,
-            "hello ",
-            props.name));
+        Didact.createElement("h1", { onClick: function () { return setState(function (c) { return c + 1; }); }, style: "user-select: none" },
+            "Count: ",
+            state));
 }
 Didact.render(Didact.createElement(App, { name: "world", value: "hha" }), container);
