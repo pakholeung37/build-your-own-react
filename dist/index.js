@@ -99,11 +99,24 @@ function updateDom(dom, prevProps, nextProps) {
         dom.addEventListener(eventType, nextProps[name]);
     });
 }
+function commitDeletion(fiber, domParent) {
+    if (fiber.dom) {
+        domParent.removeChild(fiber.dom);
+    }
+    else {
+        commitDeletion(fiber.child, domParent);
+    }
+}
 function commitWork(fiber) {
     if (!fiber) {
         return;
     }
-    var domParent = fiber.parent.dom;
+    // find the nearest real domFiber
+    var domParentFiber = fiber.parent;
+    while (!domParentFiber.dom) {
+        domParentFiber = domParentFiber.parent;
+    }
+    var domParent = domParentFiber.dom;
     if (fiber.effectTag === "PLACEMENT" &&
         fiber.dom != null) {
         domParent.appendChild(fiber.dom);
@@ -113,13 +126,13 @@ function commitWork(fiber) {
         updateDom(fiber.dom, fiber.alternate.props, fiber.props);
     }
     else if (fiber.effectTag === "DELETION") {
-        domParent.removeChild(fiber.dom);
+        // delete the nearest real dom child from the parent dom node
+        commitDeletion(fiber, domParent);
     }
     commitWork(fiber.child);
     commitWork(fiber.sibling);
 }
 function commitRoot() {
-    console.log('commitRoot');
     deletions.forEach(function (fiber) { return commitWork(fiber); });
     commitWork(wipRoot.child);
     currentRoot = wipRoot;
@@ -186,12 +199,24 @@ function reconcileChildren(wipFiber, elements) {
         index++;
     }
 }
-function performUnitOfWork(fiber) {
+function updateFunctionComponent(fiber) {
+    var children = [fiber.type(fiber.props)];
+    reconcileChildren(fiber, children);
+}
+function updateHostComponent(fiber) {
     if (!fiber.dom) {
         fiber.dom = createDom(fiber);
     }
-    var elements = fiber.props.children;
-    reconcileChildren(fiber, elements);
+    reconcileChildren(fiber, fiber.props.children);
+}
+function performUnitOfWork(fiber) {
+    var isFunctionComponent = typeof fiber.type === 'function';
+    if (isFunctionComponent) {
+        updateFunctionComponent(fiber);
+    }
+    else {
+        updateHostComponent(fiber);
+    }
     // find the next fiber to perform
     if (fiber.child) {
         return fiber.child;
@@ -220,15 +245,11 @@ var Didact = {
     render: render
 };
 var container = document.getElementById("root");
-var updateValue = function (e) {
-    rerender(e.target.value);
-};
-var rerender = function (value) {
-    var element = (Didact.createElement("div", null,
-        Didact.createElement("input", { onInput: updateValue, value: value }),
+function App(props) {
+    return Didact.createElement("div", null,
+        Didact.createElement("input", { value: props.value }),
         Didact.createElement("h2", null,
-            "Hello ",
-            value)));
-    Didact.render(element, container);
-};
-rerender("World");
+            "hello ",
+            props.name));
+}
+Didact.render(Didact.createElement(App, { name: "world", value: "hha" }), container);
